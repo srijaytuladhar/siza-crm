@@ -1,0 +1,41 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Supabase
+.env.supabase
+*.supabase
+
+# Logs
+logs/
+*.log
+
+# Temp / test scripts
+*.tmp
+*_t*.js
+_schema.js
+
+# SQL schemas (regenerated as needed)
+backend/schema.sql
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp

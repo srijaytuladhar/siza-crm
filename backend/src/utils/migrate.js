@@ -1,14 +1,13 @@
 import { query } from '../config/database.js';
 
 const migrations = [
-  `-- Users & Roles
-CREATE TABLE IF NOT EXISTS CRM_roles (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `CREATE TABLE IF NOT EXISTS CRM_roles (
+    id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS CRM_users (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     full_name VARCHAR(150) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -19,9 +18,8 @@ CREATE TABLE IF NOT EXISTS CRM_users (
     updated_at TIMESTAMP DEFAULT NOW()
 );`,
 
-  `-- Projects
-CREATE TABLE IF NOT EXISTS CRM_projects (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `CREATE TABLE IF NOT EXISTS CRM_projects (
+    id SERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
     description TEXT,
     status VARCHAR(50) DEFAULT 'active',
@@ -31,16 +29,15 @@ CREATE TABLE IF NOT EXISTS CRM_projects (
 );
 
 CREATE TABLE IF NOT EXISTS CRM_project_users (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     project_id INT REFERENCES CRM_projects(id) ON DELETE CASCADE,
     user_id INT REFERENCES CRM_users(id) ON DELETE CASCADE,
     assigned_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE KEY uq_project_user (project_id, user_id)
+    UNIQUE (project_id, user_id)
 );`,
 
-  `-- Items
-CREATE TABLE IF NOT EXISTS CRM_items (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `CREATE TABLE IF NOT EXISTS CRM_items (
+    id SERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
     description TEXT,
     quantity INT DEFAULT 0,
@@ -53,9 +50,8 @@ CREATE TABLE IF NOT EXISTS CRM_items (
     updated_at TIMESTAMP DEFAULT NOW()
 );`,
 
-  `-- Petty Cash
-CREATE TABLE IF NOT EXISTS CRM_petty_cash_allocations (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `CREATE TABLE IF NOT EXISTS CRM_petty_cash_allocations (
+    id SERIAL PRIMARY KEY,
     user_id INT REFERENCES CRM_users(id),
     amount NUMERIC(12,2) NOT NULL,
     assigned_by INT REFERENCES CRM_users(id),
@@ -64,7 +60,7 @@ CREATE TABLE IF NOT EXISTS CRM_petty_cash_allocations (
 );
 
 CREATE TABLE IF NOT EXISTS CRM_petty_cash_expenses (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INT REFERENCES CRM_users(id),
     amount NUMERIC(12,2) NOT NULL,
     description TEXT,
@@ -72,9 +68,8 @@ CREATE TABLE IF NOT EXISTS CRM_petty_cash_expenses (
     created_at TIMESTAMP DEFAULT NOW()
 );`,
 
-  `-- Bills (Income & Expense)
-CREATE TABLE IF NOT EXISTS CRM_bills (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `CREATE TABLE IF NOT EXISTS CRM_bills (
+    id SERIAL PRIMARY KEY,
     type VARCHAR(20) NOT NULL,
     amount NUMERIC(12,2) NOT NULL,
     category VARCHAR(100),
@@ -86,9 +81,8 @@ CREATE TABLE IF NOT EXISTS CRM_bills (
     updated_at TIMESTAMP DEFAULT NOW()
 );`,
 
-  `-- Audit Log
-CREATE TABLE IF NOT EXISTS CRM_audit_logs (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `CREATE TABLE IF NOT EXISTS CRM_audit_logs (
+    id SERIAL PRIMARY KEY,
     user_id INT REFERENCES CRM_users(id),
     action VARCHAR(100) NOT NULL,
     entity_type VARCHAR(50),
@@ -97,17 +91,15 @@ CREATE TABLE IF NOT EXISTS CRM_audit_logs (
     created_at TIMESTAMP DEFAULT NOW()
 );`,
 
-  `-- Insert default roles
-INSERT IGNORE INTO CRM_roles (name) VALUES ('super_admin'), ('admin'), ('user');`,
+  `INSERT INTO CRM_roles (name) VALUES ('super_admin'), ('admin'), ('user') ON CONFLICT DO NOTHING;`,
 
-  `-- Item Types (specific to an item)
-CREATE TABLE IF NOT EXISTS CRM_item_types (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `CREATE TABLE IF NOT EXISTS CRM_item_types (
+    id SERIAL PRIMARY KEY,
     item_id INT REFERENCES CRM_items(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     created_by INT REFERENCES CRM_users(id),
     created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE KEY uq_item_type (item_id, name)
+    UNIQUE (item_id, name)
 );`
 ];
 
@@ -128,85 +120,48 @@ const indexes = [
   ['idx_crm_audit_created', 'CRM_audit_logs', 'created_at'],
 ];
 
-const ensureColumn = async (table, column, definition) => {
+const columnExists = async (table, column) => {
   const res = await query(
     `SELECT COUNT(*) AS count FROM information_schema.COLUMNS
-     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+     WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?`,
     [table, column]
   );
-  if (Number(res.rows[0].count) === 0) {
+  return Number(res.rows[0].count) > 0;
+};
+
+const indexExists = async (index) => {
+  const res = await query(
+    `SELECT COUNT(*) AS count FROM pg_indexes WHERE indexname = ?`,
+    [index]
+  );
+  return Number(res.rows[0].count) > 0;
+};
+
+const ensureColumn = async (table, column, definition) => {
+  if (!(await columnExists(table, column))) {
     await query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     console.log(`Added column ${table}.${column}`);
   }
 };
 
 const dropColumn = async (table, column) => {
-  const res = await query(
-    `SELECT COUNT(*) AS count FROM information_schema.COLUMNS
-     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
-    [table, column]
-  );
-  if (Number(res.rows[0].count) > 0) {
+  if (await columnExists(table, column)) {
     await query(`ALTER TABLE ${table} DROP COLUMN ${column}`);
     console.log(`Dropped column ${table}.${column}`);
   }
 };
 
-const dropIndex = async (table, index) => {
-  const res = await query(
-    `SELECT COUNT(*) AS count FROM information_schema.statistics
-     WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
-    [table, index]
-  );
-  if (Number(res.rows[0].count) > 0) {
-    await query(`ALTER TABLE ${table} DROP INDEX ${index}`);
-    console.log(`Dropped index ${table}.${index}`);
-  }
-};
-
 const applySchemaPatches = async () => {
-  // Item types are now specific to an item
   await ensureColumn('CRM_item_types', 'item_id', 'INT REFERENCES CRM_items(id) ON DELETE CASCADE');
   await ensureColumn('CRM_bills', 'item_id', 'INT REFERENCES CRM_items(id)');
   await ensureColumn('CRM_bills', 'type_id', 'INT REFERENCES CRM_item_types(id)');
-
-  // Remove the old global UNIQUE on type name, enforce unique per (item_id, name)
-  await dropIndex('CRM_item_types', 'name');
-  const hasUnique = await query(
-    `SELECT COUNT(*) AS count FROM information_schema.statistics
-     WHERE table_schema = DATABASE() AND table_name = 'CRM_item_types' AND index_name = 'uq_item_type'`
-  );
-  if (Number(hasUnique.rows[0].count) === 0) {
-    await query(`ALTER TABLE CRM_item_types ADD UNIQUE KEY uq_item_type (item_id, name)`);
-    console.log('Added unique key CRM_item_types.uq_item_type');
-  }
-
-  // Items no longer store a single type_id; types live in CRM_item_types keyed by item_id
-  await dropColumnWithForeignKeys('CRM_items', 'type_id');
-};
-
-const dropColumnWithForeignKeys = async (table, column) => {
-  const res = await query(
-    `SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL`,
-    [table, column]
-  );
-  for (const row of res.rows) {
-    await query(`ALTER TABLE ${table} DROP FOREIGN KEY ${row.CONSTRAINT_NAME}`);
-    console.log(`Dropped foreign key ${table}.${row.CONSTRAINT_NAME}`);
-  }
-  await dropColumn(table, column);
+  await dropColumn('CRM_items', 'type_id');
 };
 
 const ensureIndexes = async () => {
   for (const [name, table, columns] of indexes) {
-    const res = await query(
-      `SELECT COUNT(*) AS count FROM information_schema.statistics
-       WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
-      [table, name]
-    );
-    if (Number(res.rows[0].count) === 0) {
-      await query(`CREATE INDEX ${name} ON ${table} (${columns})`);
+    if (!(await indexExists(name))) {
+      await query(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${columns})`);
       console.log(`Created index ${name}`);
     }
   }

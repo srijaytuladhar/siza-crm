@@ -14,8 +14,9 @@ const poolConfig = {
 };
 
 if (config.db.connectionString) {
+  const cs = config.db.connectionString.replace(/[?&]sslmode=[^&]*/i, '');
   Object.assign(poolConfig, {
-    connectionString: config.db.connectionString,
+    connectionString: cs,
   });
 }
 

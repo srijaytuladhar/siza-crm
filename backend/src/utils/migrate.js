@@ -152,9 +152,6 @@ const dropColumn = async (table, column) => {
 };
 
 const applySchemaPatches = async () => {
-  await ensureColumn('CRM_item_types', 'item_id', 'INT REFERENCES CRM_items(id) ON DELETE CASCADE');
-  await ensureColumn('CRM_bills', 'item_id', 'INT REFERENCES CRM_items(id)');
-  await ensureColumn('CRM_bills', 'type_id', 'INT REFERENCES CRM_item_types(id)');
   await dropColumn('CRM_items', 'type_id');
 };
 

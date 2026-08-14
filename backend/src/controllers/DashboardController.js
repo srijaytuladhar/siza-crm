@@ -60,12 +60,12 @@ export const DashboardController = {
       // Get monthly income/expense for charts (last 12 months)
       const monthlyRes = await query(
         `SELECT 
-          DATE_FORMAT(bill_date, '%Y-%m-01') as month,
+          to_char(bill_date, 'YYYY-MM-01') as month,
           type,
           COALESCE(SUM(amount), 0) as total
          FROM CRM_bills
-         WHERE bill_date >= NOW() - INTERVAL 12 MONTH
-         GROUP BY DATE_FORMAT(bill_date, '%Y-%m-01'), type
+         WHERE bill_date >= NOW() - INTERVAL '12 months'
+         GROUP BY to_char(bill_date, 'YYYY-MM-01'), type
          ORDER BY month`
       );
 

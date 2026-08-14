@@ -17,10 +17,16 @@ import auditLogRoutes from '../src/routes/auditLogs.js';
 const app = express();
 
 app.use(helmet());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'https://siza-crm-ui.vercel.app',
+  ...config.cors.origin.split(',').map((o) => o.trim()).filter(Boolean),
+];
+
 app.use(cors({
   origin: (origin, cb) => {
-    const allowed = config.cors.origin.split(',').map((o) => o.trim());
-    if (!origin || allowed.includes(origin)) return cb(null, true);
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
     return cb(null, false);
   },
   credentials: true,
